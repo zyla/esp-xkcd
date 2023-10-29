@@ -8,7 +8,8 @@ What is challenging about this is that the image we're displaying might not fit 
 
 ![image](https://github.com/zyla/esp-xkcd/assets/1410069/c6f6e7a0-8577-4229-bb78-c4de78236b0d)
 
-_`esp-xkcd` running on `esp32c2` with SSD1306 display, showing [XKCD #2846](https://xkcd.com/2846/)_
+_`esp-xkcd` running on `esp32c2` with SSD1306 display, showing [XKCD #2846](https://xkcd.com/2846/)  
+Original image license: [CC BY-NC 2.5](https://xkcd.com/license.html)_
 
 ## Features
 
