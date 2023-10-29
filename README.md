@@ -1,14 +1,16 @@
-# ESP-Jokes-RS
+# `esp-xkcd`
 
-ESP-Jokes-RS is a lightweight, fun, and educational project that brings humor and laughter to your ESP32C32 development board by displaying jokes on its OLED or LCD screen. What's unique about this project is that it is written in Rust, using the `no_std` library, in adherence to the principles described in the [ESP-RS book](https://esp-rs.github.io/book/writing-your-own-application/nostd.html). This repository is based on the Wokwi example project for ESP32 and aims to demonstrate how you can program your ESP32 board in Rust without relying on the standard library. 
+Embedded Rust XKCD viewer. Displays a random XKCD on a LCD or OLED display.
 
-But what makes ESP-Jokes-RS even more entertaining is that it fetches jokes from the internet on a button click! With the press of a button, your ESP32 board connects to https://v2.jokeapi.dev/ and retrieves a random joke from the internet, providing you with a source of endless laughter and amusement. This feature adds an interactive and dynamic element to your development board, making it both an educational and entertaining gadget.
+It is written in Rust, using the `no_std` library, in adherence to the principles described in the [ESP-RS book](https://esp-rs.github.io/book/writing-your-own-application/nostd.html). This repository is based on [esp-jokes-rs](https://github.com/jborkowski/esp-jokes-rs).
+
+What is challenging about this is that the image we're displaying doesn't fit in RAM (400K on `esp32c3`), and sometimes neither does the input file. The [`incremental-png`](https://github.com/zyla/incremental-png) library was created to address this. It's focused in incremental decoding and minimizing memory usage.
 
 ## Features
 
-- Displays a collection of jokes on the OLED or LCD screen of your ESP32.
+- Displays XKCD image
 - Written in Rust, showcasing how to use the `no_std` library for ESP32 development.
-- Supports various display drivers, including ST7735 and SSD1306, thanks to the contributions in [this pull request](https://github.com/jborkowski/esp-jokes-rs/pull/1).
+- Supports various display drivers, including ST7735 and SSD1306
 
 ## Supported hardware configurations
 
@@ -71,7 +73,7 @@ Follow these steps to set up and run the project:
    ```
    **Note**: You might need additional options here depending on your hardware configuration, see [Supported hardware configurations](#supported-hardware-configurations).
 
-5. Once the flashing process is complete, press the BOOT button, and your ESP32 board will display a series of jokes on the OLED or LCD screen. Enjoy the humor!
+5. Once the flashing process is complete, ESP board will connect to WiFi and display the image. Enjoy!
 
 ## Project Structure
 
@@ -98,7 +100,3 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 ## Special Thanks
 
 Special thanks to the ESP32 community, the Rust programming language developers, and everyone who contributed to the libraries and tools used in this project.
-
----
-
-Let's have some fun and share a good laugh with your ESP32 board using ESP-Jokes-RS! If you encounter any issues or have suggestions, please don't hesitate to get involved in this project. Happy coding and happy laughing!
