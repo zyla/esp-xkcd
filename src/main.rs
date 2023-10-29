@@ -4,7 +4,7 @@
 #![allow(clippy::upper_case_acronyms)]
 
 extern crate alloc;
-use core::{mem::MaybeUninit, ops::ControlFlow, str};
+use core::{alloc::GlobalAlloc, ops::ControlFlow, str};
 use embassy_net::{
     dns::DnsSocket,
     tcp::client::{TcpClient, TcpClientState},
@@ -35,22 +35,34 @@ use incremental_png::{
     inflater::{self, Inflater},
     stream_decoder::{ImageHeader, StreamDecoder},
 };
-use reqwless::client::{HttpClient, TlsConfig, TlsVerify};
+use reqwless::client::HttpClient;
 use reqwless::request::Method;
 use static_cell::make_static;
 
 const SSID: &str = env!("SSID");
 const PASSWORD: &str = env!("PASSWORD");
 
+// Ideally we'd like to get rid of the allocator, but some dependency requires it and it's hard to
+// find out which one.
+// See
+// <https://users.rust-lang.org/t/rust-no-std-find-why-global-memory-allocator-is-required/77679>
 #[global_allocator]
-static ALLOCATOR: esp_alloc::EspHeap = esp_alloc::EspHeap::empty();
+static ALLOCATOR: FakeAllocator = FakeAllocator;
 
-fn init_heap() {
-    const HEAP_SIZE: usize = 32 * 1024;
-    static mut HEAP: MaybeUninit<[u8; HEAP_SIZE]> = MaybeUninit::uninit();
+struct FakeAllocator;
 
-    unsafe {
-        ALLOCATOR.init(HEAP.as_mut_ptr() as *mut u8, HEAP_SIZE);
+unsafe impl GlobalAlloc for FakeAllocator {
+    unsafe fn alloc(&self, _: core::alloc::Layout) -> *mut u8 {
+        panic!("who needs the allocator?");
+    }
+    unsafe fn dealloc(&self, _: *mut u8, _: core::alloc::Layout) {
+        panic!("who needs the allocator?");
+    }
+    unsafe fn alloc_zeroed(&self, _: core::alloc::Layout) -> *mut u8 {
+        panic!("who needs the allocator?");
+    }
+    unsafe fn realloc(&self, _: *mut u8, _: core::alloc::Layout, _: usize) -> *mut u8 {
+        panic!("who needs the allocator?");
     }
 }
 
@@ -102,7 +114,6 @@ use display::DISPLAY;
 
 #[embassy_executor::main(entry = "hal::entry")]
 async fn main(spawner: embassy_executor::Spawner) {
-    init_heap();
     let peripherals = Peripherals::take();
     #[cfg(feature = "esp32c3")]
     let mut system = peripherals.SYSTEM.split();

@@ -20,7 +20,7 @@ embassy-executor = { git = "https://github.com/embassy-rs/embassy", rev = "889d4
 embassy-net = { git = "https://github.com/embassy-rs/embassy", rev = "889d482", features = ["nightly","tcp","proto-ipv4","medium-ethernet","dhcpv4", "dns", "log", "udp", "medium-ip" ] }
 embassy-net-driver = { git = "https://github.com/embassy-rs/embassy", rev = "889d482"}
 embassy-time = { git = "https://github.com/embassy-rs/embassy", rev = "889d482",  features = ["nightly"]}
-reqwless = { version = "0.8.0", features = ["alloc", "log"] }
+reqwless = { version = "0.8.0", features = ["log"] }
 
 embedded-graphics = "0.8.1"
 
