@@ -240,109 +240,69 @@ async fn main(spawner: embassy_executor::Spawner) {
     spawner.spawn(connection_wifi(controller)).ok();
     spawner.spawn(net_task(stack)).ok();
     spawner.spawn(task(input, stack, seed.into(), display)).ok();
-    //  spawner.spawn(get_joke(&stack)).ok();
 }
 
 #[embassy_executor::task]
 async fn task(
     mut input: Gpio9<Input<PullUp>>,
     stack: &'static Stack<WifiDevice<'static>>,
-    seed: u64,
+    _seed: u64,
     mut display: DISPLAY<'static>,
 ) {
     let mut rx_buffer = [0; 8 * 1024];
-    let mut tls_read_buffer = [0; 8 * 1024];
-    let mut tls_write_buffer = [0; 8 * 1024];
     let client_state = TcpClientState::<4, 4096, 4096>::new();
     let tcp_client = TcpClient::new(stack, &client_state);
     let dns = DnsSocket::new(stack);
 
-    let style = MonoTextStyle::new(&FONT_6X10, display::TEXT);
-    let textbox_style = TextBoxStyleBuilder::new()
-        .height_mode(HeightMode::FitToText)
-        .alignment(HorizontalAlignment::Justified)
-        .paragraph_spacing(6)
-        .build();
-
-    let bounds = Rectangle::new(
-        Point::zero(),
-        Size::new(display.bounding_box().size.width, 0),
-    );
-
     loop {
-        let _ = input.wait_for_any_edge().await;
-        if input.is_high().unwrap() {
-            println!("started");
-            loop {
-                if stack.is_link_up() {
-                    break;
-                }
-                Timer::after(Duration::from_millis(500)).await;
+        stack.wait_config_up().await;
+        loop {
+            if let Some(config) = stack.config_v4() {
+                println!("Got IP: {}", config.address);
+                break;
             }
+            Timer::after(Duration::from_millis(500)).await;
+        }
 
-            println!("Waiting to get IP address...");
-            loop {
-                if let Some(config) = stack.config_v4() {
-                    println!("Got IP: {}", config.address);
-                    break;
-                }
-                Timer::after(Duration::from_millis(500)).await;
-            }
-            display.clear(display::TEXT).unwrap();
-            display::flush(&mut display).unwrap();
+        display.clear(display::TEXT).unwrap();
+        display::flush(&mut display).unwrap();
 
-            let tls_config = TlsConfig::new(
-                seed,
-                &mut tls_read_buffer,
-                &mut tls_write_buffer,
-                TlsVerify::None,
-            );
-            let mut http_client = HttpClient::new_with_tls(&tcp_client, &dns, tls_config);
-            let mut request = http_client
-                .request(
-                    Method::GET,
-                    "https://v2.jokeapi.dev/joke/Programming?format=txt",
-                )
-                .await
-                .unwrap();
+        // FIXME: HTTPS doesn't work on imgs.xkcd.com: Tls(HandshakeAborted(Fatal, ProtocolVersion))
+        // let mut tls_read_buffer = [0; 8 * 1024];
+        // let mut tls_write_buffer = [0; 8 * 1024];
+        // let tls_config = TlsConfig::new(
+        //     seed,
+        //     &mut tls_read_buffer,
+        //     &mut tls_write_buffer,
+        //     TlsVerify::None,
+        // );
+        // let mut http_client = HttpClient::new_with_tls(&tcp_client, &dns, tls_config);
 
-            let response = request.send(&mut rx_buffer).await.unwrap();
+        let mut http_client = HttpClient::new(&tcp_client, &dns);
+        let mut request = http_client
+            .request(
+                Method::GET,
+                "http://imgs.xkcd.com/comics/daylight_saving_choice.png",
+            )
+            .await
+            .unwrap();
 
-            let text = str::from_utf8(response.body().read_to_end().await.unwrap()).unwrap();
-            println!("Joke: {}", text);
+        let response = request.send(&mut rx_buffer).await.unwrap();
 
-            let text_height = textbox_style.measure_text_height(&style, text, bounds.size.width);
-            let screen_height = display.bounding_box().size.height;
-            let max_offset = core::cmp::max(0, text_height as i32 - screen_height as i32) as u32;
+        println!("Content-length: {:?}", response.content_length);
 
-            let mut offset: u32 = 0;
-            loop {
-                println!("Drawing at offset {offset}");
-
-                display.clear(display::BACKGROUND).unwrap();
-                TextBox::with_textbox_style(text, bounds, style, textbox_style)
-                    .translate(Point::new(0, -(offset as i32)))
-                    .draw(&mut display).unwrap();
-                display::flush(&mut display).unwrap();
-
-                if offset >= max_offset {
-                    println!("Beyond max offset, end of this joke");
-                    break;
-                }
-
-                println!("Still some text left to display (max_offset={max_offset}), press to scroll");
-                offset = core::cmp::min(max_offset, offset + screen_height / 2);
-
-                loop {
-                    let _ = input.wait_for_any_edge().await;
-                    if input.is_high().unwrap() {
-                        break;
-                    }
-                }
+        // wait for button press
+        loop {
+            let _ = input.wait_for_any_edge().await;
+            if input.is_high().unwrap() {
+                break;
             }
         }
     }
 }
+
+// TODO: something like this should be in `incremental-png` itself
+struct PngReader {}
 
 #[embassy_executor::task]
 async fn connection_wifi(mut controller: WifiController<'static>) {
@@ -377,25 +337,4 @@ async fn connection_wifi(mut controller: WifiController<'static>) {
 #[embassy_executor::task]
 async fn net_task(stack: &'static Stack<WifiDevice<'static>>) {
     stack.run().await
-}
-
-#[embassy_executor::task]
-async fn get_joke(stack: &'static Stack<WifiDevice<'static>>) {
-    loop {
-        if stack.is_link_up() {
-            break;
-        }
-        Timer::after(Duration::from_millis(500)).await;
-    }
-
-    println!("Waiting to get IP address...");
-    loop {
-        if let Some(config) = stack.config_v4() {
-            println!("Got IP: {}", config.address);
-            break;
-        }
-        Timer::after(Duration::from_millis(500)).await;
-    }
-
-    println!("Got IP: {}", stack.is_config_up());
 }

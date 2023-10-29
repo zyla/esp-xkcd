@@ -3,6 +3,12 @@
 version = 3
 
 [[package]]
+name = "adler"
+version = "1.0.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f26201604c87b1e01bd3d98f8d5d9a8fcbb815e8cedb41ffccbeb4bf593a35fe"
+
+[[package]]
 name = "aead"
 version = "0.5.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -817,6 +823,7 @@ dependencies = [
  "esp32c3-hal",
  "esp32c6-hal",
  "heapless 0.7.16",
+ "incremental-png",
  "log",
  "reqwless",
  "smoltcp",
@@ -1273,6 +1280,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b9e0384b61958566e926dc50660321d12159025e767c18e043daf26b70104c39"
 
 [[package]]
+name = "incremental-png"
+version = "0.1.0"
+source = "git+https://github.com/zyla/incremental-png#b608c997f2ebd1eec017ccedb3efc3e096ec9bf8"
+dependencies = [
+ "heapless 0.7.16",
+ "miniz_oxide",
+]
+
+[[package]]
 name = "indexmap"
 version = "2.0.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1350,6 +1366,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1f98b09920c8be9ff96a5625aca5b5db7a4f4ba025132ff7d7aacb72c0244a45"
 dependencies = [
  "serde",
+]
+
+[[package]]
+name = "miniz_oxide"
+version = "0.7.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e7810e0be55b428ada41041c41f32c9f1a42817901b4ccf45fa3d4b6561e74c7"
+dependencies = [
+ "adler",
 ]
 
 [[package]]
