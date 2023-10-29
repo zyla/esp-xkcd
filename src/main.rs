@@ -258,8 +258,8 @@ async fn task(
     _seed: u64,
     mut display: DISPLAY<'static>,
 ) {
-    let mut rx_buffer = [0; 512];
-    let client_state = TcpClientState::<1, 512, 512>::new();
+    let mut rx_buffer = [0; 2048];
+    let client_state = TcpClientState::<1, 2048, 2048>::new();
     let tcp_client = TcpClient::new(stack, &client_state);
     let dns = DnsSocket::new(stack);
 
