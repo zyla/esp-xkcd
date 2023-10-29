@@ -4,7 +4,11 @@ Embedded Rust XKCD viewer. Displays a random XKCD on a LCD or OLED display.
 
 It is written in Rust, using the `no_std` library, in adherence to the principles described in the [ESP-RS book](https://esp-rs.github.io/book/writing-your-own-application/nostd.html). This repository is based on [esp-jokes-rs](https://github.com/jborkowski/esp-jokes-rs).
 
-What is challenging about this is that the image we're displaying doesn't fit in RAM (400K on `esp32c3`), and sometimes neither does the input file. The [`incremental-png`](https://github.com/zyla/incremental-png) library was created to address this. It's focused in incremental decoding and minimizing memory usage.
+What is challenging about this is that the image we're displaying might not fit in RAM (400K on `esp32c3`, but less is available for our code), and sometimes neither does the input file. The [`incremental-png`](https://github.com/zyla/incremental-png) library was created to address this. It's focused in incremental decoding and minimizing memory usage.
+
+![image](https://github.com/zyla/esp-xkcd/assets/1410069/c6f6e7a0-8577-4229-bb78-c4de78236b0d)
+
+_`esp-xkcd` running on `esp32c2` with SSD1306 display, showing [XKCD #2846](https://xkcd.com/2846/)_
 
 ## Features
 
