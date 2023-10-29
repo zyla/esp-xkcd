@@ -256,6 +256,10 @@ async fn task(
         "http://imgs.xkcd.com/comics/the_universal_label.png",
         "http://imgs.xkcd.com/comics/journal_4.png",
         "http://imgs.xkcd.com/comics/daylight_saving_choice.png",
+        // biggest grayscale image - 549K
+        "http://imgs.xkcd.com/comics/the_pace_of_modern_life.png",
+        // non-text
+        "http://imgs.xkcd.com/comics/to_be_wanted.png",
         // Doesn't work, we only handle grayscale images for now
         // "http://imgs.xkcd.com/comics/dendrochronology.png",
 
