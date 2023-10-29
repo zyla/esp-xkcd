@@ -252,6 +252,19 @@ async fn task(
     let tcp_client = TcpClient::new(stack, &client_state);
     let dns = DnsSocket::new(stack);
 
+    const IMAGE_URLS: &[&str] = &[
+        "http://imgs.xkcd.com/comics/the_universal_label.png",
+        "http://imgs.xkcd.com/comics/journal_4.png",
+        "http://imgs.xkcd.com/comics/daylight_saving_choice.png",
+        // Doesn't work, we only handle grayscale images for now
+        // "http://imgs.xkcd.com/comics/dendrochronology.png",
+
+        // Crashes with "buffer error" from incremental-png :(
+        // "http://imgs.xkcd.com/comics/depth.png",
+    ];
+
+    let mut image_index = 0;
+
     loop {
         stack.wait_config_up().await;
         loop {
@@ -278,12 +291,10 @@ async fn task(
 
         let mut http_client = HttpClient::new(&tcp_client, &dns);
         let mut request = http_client
-            .request(
-                Method::GET,
-                "http://imgs.xkcd.com/comics/daylight_saving_choice.png",
-            )
+            .request(Method::GET, IMAGE_URLS[image_index])
             .await
             .unwrap();
+        image_index = (image_index + 1) % IMAGE_URLS.len();
 
         let response = request.send(&mut rx_buffer).await.unwrap();
 
@@ -312,6 +323,9 @@ async fn task(
                     inflater::Event::ImageHeader(header) => {
                         println!("Image header: {:?}", header);
                         image_header = Some(header);
+
+                        display.clear(display::BACKGROUND).unwrap();
+                        display::flush(&mut display).unwrap();
                     }
                     inflater::Event::End => {
                         println!("Image end");
@@ -349,6 +363,10 @@ async fn task(
             }
         }
 
+        // Disconnect
+        drop(request);
+        drop(http_client);
+
         // wait for button press
         loop {
             let _ = input.wait_for_any_edge().await;
@@ -363,7 +381,7 @@ async fn task(
 struct PngReader {
     dechunker: Dechunker,
     sd: StreamDecoder,
-    inflater: Inflater,
+    inflater: Inflater<256>,
 }
 
 impl PngReader {
