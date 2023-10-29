@@ -4,22 +4,14 @@
 #![allow(clippy::upper_case_acronyms)]
 
 extern crate alloc;
-use core::{mem::MaybeUninit, str};
+use core::{mem::MaybeUninit, ops::ControlFlow, str};
 use embassy_net::{
     dns::DnsSocket,
     tcp::client::{TcpClient, TcpClientState},
     Config, Stack, StackResources,
 };
 use embassy_time::{Duration, Timer};
-use embedded_graphics::mono_font::ascii::FONT_6X10;
-use embedded_graphics::mono_font::MonoTextStyle;
-use embedded_graphics::prelude::*;
-use embedded_graphics::primitives::Rectangle;
 use embedded_svc::wifi::{ClientConfiguration, Configuration, Wifi};
-use embedded_text::alignment::HorizontalAlignment;
-use embedded_text::style::HeightMode;
-use embedded_text::style::TextBoxStyleBuilder;
-use embedded_text::TextBox;
 use esp_backtrace as _;
 use esp_println::println;
 use esp_wifi::wifi::{WifiController, WifiDevice, WifiEvent, WifiMode, WifiState};
@@ -37,6 +29,12 @@ use hal::{
 use hal::{systimer::SystemTimer, Rng};
 
 use embedded_graphics::draw_target::DrawTarget;
+use embedded_io_async::Read;
+use incremental_png::{
+    dechunker::Dechunker,
+    inflater::{self, Inflater},
+    stream_decoder::{ImageHeader, StreamDecoder},
+};
 use reqwless::client::{HttpClient, TlsConfig, TlsVerify};
 use reqwless::request::Method;
 use static_cell::make_static;
@@ -249,8 +247,8 @@ async fn task(
     _seed: u64,
     mut display: DISPLAY<'static>,
 ) {
-    let mut rx_buffer = [0; 8 * 1024];
-    let client_state = TcpClientState::<4, 4096, 4096>::new();
+    let mut rx_buffer = [0; 512];
+    let client_state = TcpClientState::<1, 512, 512>::new();
     let tcp_client = TcpClient::new(stack, &client_state);
     let dns = DnsSocket::new(stack);
 
@@ -291,6 +289,66 @@ async fn task(
 
         println!("Content-length: {:?}", response.content_length);
 
+        let mut png = PngReader::new();
+        let mut reader = response.body().reader();
+
+        let display_width = display.dimensions().0 as u32;
+        let display_height = display.dimensions().1 as u32;
+        let mut x: u32 = 0;
+        let mut y: u32 = 0;
+        let mut image_header: Option<ImageHeader> = None;
+
+        let mut buf = [0; 1024];
+        let mut total_bytes_read = 0;
+        loop {
+            let n = reader.read(&mut buf).await.unwrap();
+            if n == 0 {
+                break;
+            }
+            total_bytes_read += n;
+            println!("Received {} bytes (total {})", n, total_bytes_read);
+            let flow = png.process_data::<()>(&buf[..n], |event| {
+                match event {
+                    inflater::Event::ImageHeader(header) => {
+                        println!("Image header: {:?}", header);
+                        image_header = Some(header);
+                    }
+                    inflater::Event::End => {
+                        println!("Image end");
+                    }
+                    inflater::Event::ImageData(pixels) => {
+                        let image_header = image_header.as_ref().expect("no header!");
+                        println!("Decoded {} pixels", pixels.len());
+
+                        // Assuming 8-bit grayscale, no filtering, no interlacing
+
+                        for pixel in pixels.iter().copied() {
+                            if x < display_width {
+                                display.set_pixel(x, y, pixel < 128);
+                            }
+                            x += 1;
+
+                            // FIXME: Logically we shouldn't need the +1 here. But without it the
+                            // image renders with a off-by-one error. What's going on?
+                            if x == image_header.width + 1 {
+                                x = 0;
+                                y += 1;
+                            }
+                            if y == display_height {
+                                println!("End of display");
+                                return ControlFlow::Break(());
+                            }
+                        }
+                    }
+                }
+                ControlFlow::Continue(())
+            });
+            display::flush(&mut display).unwrap();
+            if let ControlFlow::Break(_) = flow {
+                break;
+            }
+        }
+
         // wait for button press
         loop {
             let _ = input.wait_for_any_edge().await;
@@ -302,7 +360,50 @@ async fn task(
 }
 
 // TODO: something like this should be in `incremental-png` itself
-struct PngReader {}
+struct PngReader {
+    dechunker: Dechunker,
+    sd: StreamDecoder,
+    inflater: Inflater,
+}
+
+impl PngReader {
+    fn new() -> Self {
+        Self {
+            dechunker: Dechunker::new(),
+            sd: StreamDecoder::new(),
+            inflater: Inflater::new(),
+        }
+    }
+
+    fn process_data<B>(
+        &mut self,
+        mut input: &[u8],
+        mut block: impl FnMut(inflater::Event) -> ControlFlow<B>,
+    ) -> ControlFlow<B> {
+        while !input.is_empty() {
+            let (consumed, mut dc_event) = self.dechunker.update(&input).unwrap();
+
+            while let Some(e) = dc_event {
+                let (leftover, mut sd_event) = self.sd.update(e).unwrap();
+
+                while let Some(e) = sd_event {
+                    let (leftover, i_event) = self.inflater.update(e).unwrap();
+
+                    if let Some(e) = i_event {
+                        block(e)?;
+                    }
+
+                    sd_event = leftover;
+                }
+
+                dc_event = leftover;
+            }
+
+            input = &input[consumed..];
+        }
+        ControlFlow::Continue(())
+    }
+}
 
 #[embassy_executor::task]
 async fn connection_wifi(mut controller: WifiController<'static>) {

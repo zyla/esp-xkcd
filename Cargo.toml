@@ -15,7 +15,7 @@ smoltcp = { version = "0.10.0", default-features=false, features = ["proto-igmp"
 heapless = { version = "0.7.14", default-features = false }
 
 embedded-svc = { version = "0.25.0", default-features = false, features = [] }
-embedded-io = "0.4.0"
+embedded-io = "0.4"
 embassy-executor = { git = "https://github.com/embassy-rs/embassy", rev = "889d482", features = ["nightly", "integrated-timers","executor-thread","arch-riscv32"] }
 embassy-net = { git = "https://github.com/embassy-rs/embassy", rev = "889d482", features = ["nightly","tcp","proto-ipv4","medium-ethernet","dhcpv4", "dns", "log", "udp", "medium-ip" ] }
 embassy-net-driver = { git = "https://github.com/embassy-rs/embassy", rev = "889d482"}
@@ -35,7 +35,10 @@ esp32c6-hal = { version = "0.5.0", features=["embassy","async","embassy-time-tim
 st7735-lcd = {version = "0.9.0", optional = true }
 ssd1306 = { version = "0.8.4", optional = true }
 display-interface = { version = "0.4.1", optional = true }
-incremental-png = { git = "https://github.com/zyla/incremental-png", version = "0.1.0" }
+
+
+incremental-png = { git = "https://github.com/zyla/incremental-png", rev = "e05eaf91f8fd8d10f0dca7ba461c6190520c4f94" }
+embedded-io-async = "0.6.0"
 
 [features]
 default = ["display-st7735", "esp32c3"]
