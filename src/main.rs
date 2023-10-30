@@ -431,11 +431,7 @@ async fn task(
 
                         for pixel in pixels.iter().copied() {
                             if x < display_width {
-                                if pixel < 128 {
-                                    display.set_pixel(x as u16, y as u16, RgbColor::BLACK).unwrap(); 
-                                } else {
-                                    display.set_pixel(x as u16, y as u16, RgbColor::WHITE).unwrap(); 
-                                }
+                                display.set_pixel(x as u16, y as u16, Gray8::new(pixel).into()).unwrap();
                             }
                             x += 1;
 
