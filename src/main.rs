@@ -28,7 +28,7 @@ use hal::{
 };
 use hal::{systimer::SystemTimer, Rng};
 
-use embedded_graphics::draw_target::DrawTarget;
+use embedded_graphics::{draw_target::DrawTarget, prelude::RgbColor, pixelcolor::Rgb565};
 use embedded_io_async::Read;
 use incremental_png::{
     dechunker::Dechunker,
@@ -109,6 +109,39 @@ mod display {
         display.flush()
     }
 }
+
+#[cfg(feature = "display-ili9341")]
+mod display {
+    use super::*;
+    use embedded_graphics::pixelcolor::Rgb565;
+    use embedded_graphics::prelude::RgbColor;
+    use hal::peripherals::SPI2;
+    use hal::spi::FullDuplexMode;
+    use hal::Spi;
+
+    use mipidsi::*;
+    use display_interface_spi::SPIInterfaceNoCS;
+
+    pub type SPI = Spi<'static, SPI2, FullDuplexMode>;
+    pub type DISPLAY<'a> = Display<SPIInterfaceNoCS<SPI, GpioPin<Output<PushPull>, 6>>, models::ILI9341Rgb565, GpioPin<Output<PushPull>, 5>>;
+    //pub type DISPLAY<'a> = ili9341::Ili9341<SPIInterfaceNoCS<SPI, GpioPin<Output<PushPull>, 6>>, GpioPin<Output<PushPull>, 5>>; 
+    
+    pub type Color = Rgb565;
+    pub const BACKGROUND: Color = Rgb565::BLACK;
+    pub const TEXT: Color = Rgb565::RED;
+
+    pub fn flush(_display: &mut DISPLAY) -> Result<(), ()> {
+        // no-op
+        Ok(())
+    }
+
+    pub fn dimensions() -> (u32, u32) {
+        (320, 480)
+    }
+}
+
+
+
 
 use display::DISPLAY;
 
@@ -243,6 +276,49 @@ async fn main(spawner: embassy_executor::Spawner) {
         display
     };
 
+    #[cfg(feature = "display-ili9341")]
+    let mut display: DISPLAY = {
+
+        use hal::{Spi, Delay};
+        use mipidsi::*;
+        use display_interface_spi::SPIInterfaceNoCS;
+
+        use ili9341::*;
+
+        let miso = io.pins.gpio10.into_push_pull_output();
+        let rst = io.pins.gpio5.into_push_pull_output();
+        let cs =  io.pins.gpio4.into_push_pull_output();
+        let mut backlight = io.pins.gpio8.into_push_pull_output();
+        backlight.set_high().unwrap();
+
+        let spi: SPI = Spi::new(
+            peripherals.SPI2,
+            io.pins.gpio1,
+            io.pins.gpio7,
+            miso,
+            cs,
+            60u32.MHz(),
+            hal::spi::SpiMode::Mode0,
+            &mut system.peripheral_clock_control,
+            &clocks
+        );
+        let dc = io.pins.gpio6.into_push_pull_output();
+        let di = SPIInterfaceNoCS::new(spi, dc);
+        let mut delay = Delay::new(&clocks);
+
+        let mut display = Builder::ili9341_rgb565(di)
+            .with_orientation(mipidsi::Orientation::LandscapeInverted(false))
+            .with_color_order(ColorOrder::Rgb)
+            .init(&mut delay, Some(rst))
+            .unwrap();
+        
+     
+
+       // let mut display = Ili9341::new(di,rst, &mut delay,ili9341::Orientation::PortraitFlipped,  DisplaySize320x480).unwrap();
+       
+       display
+    };
+
     display.clear(display::BACKGROUND).unwrap();
     display::flush(&mut display).unwrap();
 
@@ -250,6 +326,8 @@ async fn main(spawner: embassy_executor::Spawner) {
     spawner.spawn(net_task(stack)).ok();
     spawner.spawn(task(input, stack, seed.into(), display)).ok();
 }
+
+
 
 #[embassy_executor::task]
 async fn task(
@@ -318,8 +396,8 @@ async fn task(
         let mut png = PngReader::new();
         let mut reader = response.body().reader();
 
-        let display_width = display.dimensions().0 as u32;
-        let display_height = display.dimensions().1 as u32;
+        let display_width = display::dimensions().0 as u32;
+        let display_height = display::dimensions().1 as u32;
         let mut x: u32 = 0;
         let mut y: u32 = 0;
         let mut image_header: Option<ImageHeader> = None;
@@ -353,7 +431,11 @@ async fn task(
 
                         for pixel in pixels.iter().copied() {
                             if x < display_width {
-                                display.set_pixel(x, y, pixel < 128);
+                                if pixel < 128 {
+                                    display.set_pixel(x as u16, y as u16, RgbColor::BLACK).unwrap(); 
+                                } else {
+                                    display.set_pixel(x as u16, y as u16, RgbColor::WHITE).unwrap(); 
+                                }
                             }
                             x += 1;
 
