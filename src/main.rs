@@ -235,6 +235,8 @@ async fn main(spawner: embassy_executor::Spawner) {
     wdt0.disable();
     wdt1.disable();
 
+    esp_println::logger::init_logger(log::LevelFilter::Info);
+
     let mut rng = Rng::new(peripherals.RNG);
     let timer = SystemTimer::new(peripherals.SYSTIMER).alarm0;
     let init = initialize(
