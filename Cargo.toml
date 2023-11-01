@@ -55,3 +55,11 @@ esp32c6 = ["esp32c6-hal", "esp-backtrace/esp32c6", "esp-println/esp32c6", "esp-w
 
 [profile.dev.package.esp-wifi]
 opt-level = 3
+
+[profile.dev]
+opt-level = "z"
+lto = false
+
+[profile.release]
+opt-level = "z"
+lto = false
