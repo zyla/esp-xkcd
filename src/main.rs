@@ -432,6 +432,9 @@ async fn task(
 
         // Crashes with "buffer error" from incremental-png :(
         // "http://imgs.xkcd.com/comics/depth.png",
+
+        // We don't handle this color type
+        // "http://imgs.xkcd.com/comics/breaker_box.png",
     ];
 
     let display_width = display.bounding_box().size.width;
