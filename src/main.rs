@@ -478,14 +478,14 @@ async fn task(
             // scroll right
             image_offset_x = core::cmp::min(
                 image_header.width - display_width,
-                image_offset_x + image_header.width * 3 / 2,
+                image_offset_x + display_width * 3 / 2,
             );
         } else if image_offset_y + display_height < image_header.height {
             // back to left edge, scroll vertically
             image_offset_x = 0;
             image_offset_y = core::cmp::min(
                 image_header.height - display_height,
-                image_offset_y + image_header.height,
+                image_offset_y + display_height,
             );
         } else {
             // next image
