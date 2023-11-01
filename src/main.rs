@@ -508,7 +508,7 @@ async fn task(
 struct PngReader {
     dechunker: Dechunker,
     sd: StreamDecoder,
-    inflater: Inflater<256>,
+    inflater: Inflater<1024>,
 }
 
 impl PngReader {
