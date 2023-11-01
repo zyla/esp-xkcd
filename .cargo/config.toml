@@ -28,6 +28,9 @@ rustflags = [
   "--cfg", 'target_has_atomic="16"',
   "--cfg", 'target_has_atomic="32"',
   "--cfg", 'target_has_atomic="ptr"',
+
+  # Needed for cargo-call-stack
+  "-C", "embed-bitcode",
 ]
 
 target = "riscv32imc-unknown-none-elf"
