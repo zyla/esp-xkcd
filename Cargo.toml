@@ -52,3 +52,6 @@ display-st7789 = ["mipidsi", "display-interface"]
 
 esp32c3 = ["esp32c3-hal", "esp-backtrace/esp32c3", "esp-println/esp32c3", "esp-wifi/esp32c3"]
 esp32c6 = ["esp32c6-hal", "esp-backtrace/esp32c6", "esp-println/esp32c6", "esp-wifi/esp32c6"]
+
+[profile.dev.package.esp-wifi]
+opt-level = 3
