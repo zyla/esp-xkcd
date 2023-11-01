@@ -350,7 +350,11 @@ async fn task(
         // "http://imgs.xkcd.com/comics/depth.png",
     ];
 
+    let display_width = display.bounding_box().size.width;
+    let display_height = display.bounding_box().size.height;
     let mut image_index = 0;
+    let mut image_offset_x: u32 = 0;
+    let mut image_offset_y: u32 = 0;
 
     loop {
         stack.wait_config_up().await;
@@ -381,7 +385,6 @@ async fn task(
             .request(Method::GET, IMAGE_URLS[image_index])
             .await
             .unwrap();
-        image_index = (image_index + 1) % IMAGE_URLS.len();
 
         let response = request.send(&mut rx_buffer).await.unwrap();
 
@@ -390,10 +393,8 @@ async fn task(
         let mut png = PngReader::new();
         let mut reader = response.body().reader();
 
-        let display_width = display.bounding_box().size.width;
-        let display_height = display.bounding_box().size.height;
-        let mut x: u32 = 0;
-        let mut y: u32 = 0;
+        let mut image_x: u32 = 0;
+        let mut image_y: u32 = 0;
         let mut image_header: Option<ImageHeader> = None;
 
         let mut buf = [0; 1024];
@@ -419,24 +420,40 @@ async fn task(
                     }
                     inflater::Event::ImageData(pixels) => {
                         let image_header = image_header.as_ref().expect("no header!");
-                        println!("Decoded {} pixels at ({}, {})", pixels.len(), x, y);
+                        //   println!(
+                        //       "Decoded {} pixels at ({}, {})",
+                        //       pixels.len(),
+                        //       image_x,
+                        //       image_y
+                        //   );
 
                         // Assuming 8-bit grayscale, no filtering, no interlacing
 
                         for pixel in pixels.iter().copied() {
-                            if x < display_width {
-                                display::set_pixel(&mut display, x, y, Gray8::new(pixel).into())
-                                    .unwrap();
+                            let display_x = image_x as i32 - image_offset_x as i32;
+                            let display_y = image_y as i32 - image_offset_y as i32;
+
+                            if display_y >= 0 && display_x >= 0 && display_x < display_width as i32
+                            {
+                                display::set_pixel(
+                                    &mut display,
+                                    display_x as u32,
+                                    display_y as u32,
+                                    Gray8::new(pixel).into(),
+                                )
+                                .unwrap();
                             }
-                            x += 1;
+                            image_x += 1;
 
                             // FIXME: Logically we shouldn't need the +1 here. But without it the
                             // image renders with a off-by-one error. What's going on?
-                            if x == image_header.width + 1 {
-                                x = 0;
-                                y += 1;
+                            if image_x == image_header.width + 1 {
+                                image_x = 0;
+                                image_y += 1;
                             }
-                            if y == display_height {
+
+                            let display_y = image_y as i32 - image_offset_y as i32;
+                            if display_y == display_height as i32 {
                                 println!("End of display");
                                 return ControlFlow::Break(());
                             }
@@ -454,6 +471,28 @@ async fn task(
         // Disconnect
         drop(request);
         drop(http_client);
+
+        // Decide what to do next: scroll horizontally, scroll vertically, or next image
+        let image_header = image_header.as_ref().expect("no header!");
+        if image_offset_x + display_width < image_header.width {
+            // scroll right
+            image_offset_x = core::cmp::min(
+                image_header.width - display_width,
+                image_offset_x + image_header.width * 3 / 2,
+            );
+        } else if image_offset_y + display_height < image_header.height {
+            // back to left edge, scroll vertically
+            image_offset_x = 0;
+            image_offset_y = core::cmp::min(
+                image_header.height - display_height,
+                image_offset_y + image_header.height,
+            );
+        } else {
+            // next image
+            image_offset_x = 0;
+            image_offset_y = 0;
+            image_index = (image_index + 1) % IMAGE_URLS.len();
+        }
 
         // wait for button press
         loop {
