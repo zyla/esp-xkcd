@@ -11,6 +11,7 @@ use embassy_net::{
     Config, Stack, StackResources,
 };
 use embassy_time::{Duration, Timer};
+use embedded_graphics::{pixelcolor::Gray8, prelude::Dimensions};
 use embedded_svc::wifi::{ClientConfiguration, Configuration, Wifi};
 use esp_backtrace as _;
 use esp_println::println;
@@ -69,7 +70,8 @@ unsafe impl GlobalAlloc for FakeAllocator {
 #[cfg(feature = "display-st7735")]
 mod display {
     use super::*;
-    use embedded_graphics::pixelcolor::Rgb565;
+    use embedded_graphics::pixelcolor::{raw::RawU16, Rgb565, RgbColor};
+    use embedded_graphics::prelude::RawData;
     use hal::peripherals::SPI2;
     use hal::spi::FullDuplexMode;
     use hal::Spi;
@@ -85,6 +87,50 @@ mod display {
     pub fn flush(_display: &mut DISPLAY) -> Result<(), ()> {
         // no-op
         Ok(())
+    }
+
+    pub fn set_pixel(display: &mut DISPLAY, x: u32, y: u32, color: Color) -> Result<(), ()> {
+        display.set_pixel(x as u16, y as u16, RawU16::from(color).into_inner())
+    }
+}
+
+#[cfg(feature = "display-st7789")]
+mod display {
+    use super::*;
+    use display_interface::DisplayError;
+    use display_interface_spi::SPIInterfaceNoCS;
+    use embedded_graphics::pixelcolor::{Rgb565, RgbColor};
+    use hal::peripherals::SPI2;
+    use hal::spi::FullDuplexMode;
+    use hal::Spi;
+    use mipidsi::models::ST7789;
+
+    pub type SPI = Spi<'static, SPI2, FullDuplexMode>;
+    pub type DISPLAY<'a> = mipidsi::Display<
+        SPIInterfaceNoCS<
+            Spi<'a, esp32c3_hal::peripherals::SPI2, FullDuplexMode>,
+            GpioPin<Output<esp32c3_hal::gpio::PushPull>, 6>,
+        >,
+        ST7789,
+        GpioPin<Output<esp32c3_hal::gpio::PushPull>, 7>,
+    >;
+
+    pub type Color = Rgb565;
+    pub const BACKGROUND: Color = Rgb565::BLACK;
+    pub const TEXT: Color = Rgb565::RED;
+
+    pub fn flush(_display: &mut DISPLAY) -> Result<(), ()> {
+        // no-op
+        Ok(())
+    }
+
+    pub fn set_pixel(
+        display: &mut DISPLAY,
+        x: u32,
+        y: u32,
+        color: Color,
+    ) -> Result<(), DisplayError> {
+        display.set_pixel(x as u16, y as u16, color)
     }
 }
 
@@ -107,6 +153,12 @@ mod display {
 
     pub fn flush(display: &mut DISPLAY) -> Result<(), display_interface::DisplayError> {
         display.flush()
+    }
+
+    pub fn set_pixel(display: &mut DISPLAY, x: u32, y: u32, color: Color) -> Result<(), ()> {
+        // Note: we invert pixels, because xkcd looks better that way on this display
+        display.set_pixel(x, y, color != BinaryColor::On);
+        Ok(())
     }
 }
 
@@ -219,34 +271,54 @@ async fn main(spawner: embassy_executor::Spawner) {
 
     use display::*;
 
-    #[cfg(feature = "display-st7735")]
+    #[cfg(any(feature = "display-st7735", feature = "display-st7789"))]
     let mut display: DISPLAY = {
         use hal::{Delay, Spi};
 
-        let miso = io.pins.gpio6.into_push_pull_output(); // A0
+        let mut delay = Delay::new(&clocks);
+
+        let a0 = io.pins.gpio6.into_push_pull_output();
         let rst = io.pins.gpio7.into_push_pull_output();
+
+        let sck = io.pins.gpio1;
+        let sda = io.pins.gpio2;
+        let cs = io.pins.gpio8;
 
         let spi: SPI = Spi::new(
             peripherals.SPI2,
-            io.pins.gpio1,
-            io.pins.gpio2,                         // sda
-            io.pins.gpio0.into_push_pull_output(), // dc not connected
-            io.pins.gpio8,
+            sck,
+            sda,
+            io.pins.gpio0.into_push_pull_output(), // no MISO, dummy pin
+            cs,
             60u32.MHz(),
             hal::spi::SpiMode::Mode0,
             &mut system.peripheral_clock_control,
             &clocks,
         );
 
-        let mut display = st7735_lcd::ST7735::new(spi, miso, rst, true, false, 160, 128);
+        #[cfg(feature = "display-st7735")]
+        {
+            let mut display = DISPLAY::new(spi, a0, rst, true, false, 160, 128);
+            display.init(&mut delay).unwrap();
+            display
+                .set_orientation(&st7735_lcd::Orientation::Landscape)
+                .unwrap();
+            display.set_offset(0, 0);
+            display
+        }
 
-        let mut delay = Delay::new(&clocks);
-        display.init(&mut delay).unwrap();
-        display
-            .set_orientation(&st7735_lcd::Orientation::Landscape)
-            .unwrap();
-        display.set_offset(0, 0);
-        display
+        #[cfg(feature = "display-st7789")]
+        {
+            use display_interface_spi::SPIInterfaceNoCS;
+            let interface = SPIInterfaceNoCS::new(spi, a0);
+            let display = mipidsi::Builder::st7789(interface)
+                .with_display_size(128, 160)
+                .with_framebuffer_size(128, 160)
+                .with_orientation(mipidsi::Orientation::Landscape(true))
+                .init(&mut delay, Some(rst))
+                .unwrap();
+            display
+        }
     };
 
     #[cfg(feature = "display-ssd1306")]
@@ -276,47 +348,48 @@ async fn main(spawner: embassy_executor::Spawner) {
         display
     };
 
-    #[cfg(feature = "display-ili9341")]
+    #[cfg(feature = "display-ili9488")]
     let mut display: DISPLAY = {
 
-        use hal::{Spi, Delay};
+        use hal::{spi::SpiMode, Spi, Delay};
         use mipidsi::*;
         use display_interface_spi::SPIInterfaceNoCS;
 
-        use ili9341::*;
+        // Define the Data/Command select pin as a digital output
+        let dc = io.pins.gpio6.into_push_pull_output();
+        // Define the reset pin as digital outputs and make it high
+        let mut rst = io.pins.gpio7.into_push_pull_output();
+        rst.set_high().unwrap();
 
-        let miso = io.pins.gpio10.into_push_pull_output();
-        let rst = io.pins.gpio5.into_push_pull_output();
-        let cs =  io.pins.gpio4.into_push_pull_output();
-        let mut backlight = io.pins.gpio8.into_push_pull_output();
+        let mut backlight = io.pins.gpio3.into_push_pull_output();
         backlight.set_high().unwrap();
-
-        let spi: SPI = Spi::new(
+        // Define the SPI pins and create the SPI interface
+        let sck = io.pins.gpio4;
+        let miso = io.pins.gpio2;
+        let mosi = io.pins.gpio5;
+        let cs = io.pins.gpio8;
+        let spi = Spi::new(
             peripherals.SPI2,
-            io.pins.gpio1,
-            io.pins.gpio7,
+            sck,
+            mosi,
             miso,
             cs,
-            60u32.MHz(),
-            hal::spi::SpiMode::Mode0,
+            60_u32.MHz(),
+            SpiMode::Mode2,
             &mut system.peripheral_clock_control,
-            &clocks
+            &clocks,
         );
-        let dc = io.pins.gpio6.into_push_pull_output();
+ 
+        // Define the display interface with no chip select
         let di = SPIInterfaceNoCS::new(spi, dc);
-        let mut delay = Delay::new(&clocks);
 
-        let mut display = Builder::ili9341_rgb565(di)
-            .with_orientation(mipidsi::Orientation::LandscapeInverted(false))
-            .with_color_order(ColorOrder::Rgb)
+        let mut delay = Delay::new(&clocks);
+        let mut display = Builder::ili9486_rgb666(di)
             .init(&mut delay, Some(rst))
             .unwrap();
-        
-     
 
-       // let mut display = Ili9341::new(di,rst, &mut delay,ili9341::Orientation::PortraitFlipped,  DisplaySize320x480).unwrap();
        
-       display
+        display
     };
 
     display.clear(display::BACKGROUND).unwrap();
@@ -356,7 +429,11 @@ async fn task(
         // "http://imgs.xkcd.com/comics/depth.png",
     ];
 
+    let display_width = display.bounding_box().size.width;
+    let display_height = display.bounding_box().size.height;
     let mut image_index = 0;
+    let mut image_offset_x: u32 = 0;
+    let mut image_offset_y: u32 = 0;
 
     loop {
         stack.wait_config_up().await;
@@ -387,7 +464,6 @@ async fn task(
             .request(Method::GET, IMAGE_URLS[image_index])
             .await
             .unwrap();
-        image_index = (image_index + 1) % IMAGE_URLS.len();
 
         let response = request.send(&mut rx_buffer).await.unwrap();
 
@@ -396,10 +472,8 @@ async fn task(
         let mut png = PngReader::new();
         let mut reader = response.body().reader();
 
-        let display_width = display::dimensions().0 as u32;
-        let display_height = display::dimensions().1 as u32;
-        let mut x: u32 = 0;
-        let mut y: u32 = 0;
+        let mut image_x: u32 = 0;
+        let mut image_y: u32 = 0;
         let mut image_header: Option<ImageHeader> = None;
 
         let mut buf = [0; 1024];
@@ -425,23 +499,40 @@ async fn task(
                     }
                     inflater::Event::ImageData(pixels) => {
                         let image_header = image_header.as_ref().expect("no header!");
-                        println!("Decoded {} pixels", pixels.len());
+                        //   println!(
+                        //       "Decoded {} pixels at ({}, {})",
+                        //       pixels.len(),
+                        //       image_x,
+                        //       image_y
+                        //   );
 
                         // Assuming 8-bit grayscale, no filtering, no interlacing
 
                         for pixel in pixels.iter().copied() {
-                            if x < display_width {
-                                display.set_pixel(x as u16, y as u16, Gray8::new(pixel).into()).unwrap();
+                            let display_x = image_x as i32 - image_offset_x as i32;
+                            let display_y = image_y as i32 - image_offset_y as i32;
+
+                            if display_y >= 0 && display_x >= 0 && display_x < display_width as i32
+                            {
+                                display::set_pixel(
+                                    &mut display,
+                                    display_x as u32,
+                                    display_y as u32,
+                                    Gray8::new(pixel).into(),
+                                )
+                                .unwrap();
                             }
-                            x += 1;
+                            image_x += 1;
 
                             // FIXME: Logically we shouldn't need the +1 here. But without it the
                             // image renders with a off-by-one error. What's going on?
-                            if x == image_header.width + 1 {
-                                x = 0;
-                                y += 1;
+                            if image_x == image_header.width + 1 {
+                                image_x = 0;
+                                image_y += 1;
                             }
-                            if y == display_height {
+
+                            let display_y = image_y as i32 - image_offset_y as i32;
+                            if display_y == display_height as i32 {
                                 println!("End of display");
                                 return ControlFlow::Break(());
                             }
@@ -460,6 +551,28 @@ async fn task(
         drop(request);
         drop(http_client);
 
+        // Decide what to do next: scroll horizontally, scroll vertically, or next image
+        let image_header = image_header.as_ref().expect("no header!");
+        if image_offset_x + display_width < image_header.width {
+            // scroll right
+            image_offset_x = core::cmp::min(
+                image_header.width - display_width,
+                image_offset_x + display_width * 3 / 2,
+            );
+        } else if image_offset_y + display_height < image_header.height {
+            // back to left edge, scroll vertically
+            image_offset_x = 0;
+            image_offset_y = core::cmp::min(
+                image_header.height - display_height,
+                image_offset_y + display_height,
+            );
+        } else {
+            // next image
+            image_offset_x = 0;
+            image_offset_y = 0;
+            image_index = (image_index + 1) % IMAGE_URLS.len();
+        }
+
         // wait for button press
         loop {
             let _ = input.wait_for_any_edge().await;
@@ -474,7 +587,7 @@ async fn task(
 struct PngReader {
     dechunker: Dechunker,
     sd: StreamDecoder,
-    inflater: Inflater<256>,
+    inflater: Inflater<1024>,
 }
 
 impl PngReader {

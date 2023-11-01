@@ -530,19 +530,9 @@ checksum = "0649998afacf6d575d126d83e68b78c0ab0e00ca2ac7e9b3db11b4cbe8274ef0"
 dependencies = [
  "az",
  "byteorder",
- "embedded-graphics-core 0.4.0",
+ "embedded-graphics-core",
  "float-cmp",
  "micromath",
-]
-
-[[package]]
-name = "embedded-graphics-core"
-version = "0.3.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b8b1239db5f3eeb7e33e35bd10bd014e7b2537b17e071f726a09351431337cfa"
-dependencies = [
- "az",
- "byteorder",
 ]
 
 [[package]]
@@ -835,7 +825,6 @@ dependencies = [
  "esp32c3-hal",
  "esp32c6-hal",
  "heapless 0.7.16",
- "ili9341",
  "incremental-png",
  "log",
  "mipidsi",
@@ -1294,17 +1283,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b9e0384b61958566e926dc50660321d12159025e767c18e043daf26b70104c39"
 
 [[package]]
-name = "ili9341"
-version = "0.5.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "52897a923ee65051ae7da0f0b3d326c08d3b0998aa59346dc9a856e3f137c0a9"
-dependencies = [
- "display-interface",
- "embedded-graphics-core 0.3.3",
- "embedded-hal 0.2.7",
-]
-
-[[package]]
 name = "incremental-png"
 version = "0.1.0"
 source = "git+https://github.com/zyla/incremental-png?rev=e05eaf91f8fd8d10f0dca7ba461c6190520c4f94#e05eaf91f8fd8d10f0dca7ba461c6190520c4f94"
@@ -1409,7 +1387,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "46968d0e30e7753c3503248bc48b408f9cce2bfbaa522a33e13c9aafadc4ce43"
 dependencies = [
  "display-interface",
- "embedded-graphics-core 0.4.0",
+ "embedded-graphics-core",
  "embedded-hal 0.2.7",
  "heapless 0.7.16",
  "nb 1.1.0",
@@ -1801,7 +1779,7 @@ dependencies = [
  "display-interface",
  "display-interface-i2c",
  "display-interface-spi",
- "embedded-graphics-core 0.4.0",
+ "embedded-graphics-core",
  "embedded-hal 0.2.7",
 ]
 
