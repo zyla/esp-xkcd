@@ -389,7 +389,7 @@ async fn main(spawner: embassy_executor::Spawner) {
 
         let mut delay = Delay::new(&clocks);
         let display = Builder::ili9486_rgb666(di)
-            .with_orientation(Orientation::Landscape(true))
+            .with_orientation(Orientation::PortraitInverted(true))
             .init(&mut delay, Some(rst))
             .unwrap();
 
@@ -428,7 +428,7 @@ async fn task(
         // non-text
         "http://imgs.xkcd.com/comics/to_be_wanted.png",
         // Doesn't work, we only handle grayscale images for now
-        // "http://imgs.xkcd.com/comics/dendrochronology.png",
+        "http://imgs.xkcd.com/comics/dendrochronology.png",
 
         // Crashes with "buffer error" from incremental-png :(
         // "http://imgs.xkcd.com/comics/depth.png",
