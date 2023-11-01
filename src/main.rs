@@ -29,7 +29,7 @@ use hal::{
 };
 use hal::{systimer::SystemTimer, Rng};
 
-use embedded_graphics::{draw_target::DrawTarget, prelude::RgbColor, pixelcolor::Rgb565};
+use embedded_graphics::draw_target::DrawTarget;
 use embedded_io_async::Read;
 use incremental_png::{
     dechunker::Dechunker,
@@ -388,7 +388,8 @@ async fn main(spawner: embassy_executor::Spawner) {
         let di = SPIInterfaceNoCS::new(spi, dc);
 
         let mut delay = Delay::new(&clocks);
-        let mut display = Builder::ili9486_rgb666(di)
+        let display = Builder::ili9486_rgb666(di)
+            .with_orientation(Orientation::Landscape(true))
             .init(&mut delay, Some(rst))
             .unwrap();
 
@@ -396,7 +397,7 @@ async fn main(spawner: embassy_executor::Spawner) {
         display
     };
 
-    display.clear(display::BACKGROUND.into()).unwrap();
+    display.clear(display::BACKGROUND).unwrap();
     display::flush(&mut display).unwrap();
 
     spawner.spawn(connection_wifi(controller)).ok();
@@ -449,7 +450,7 @@ async fn task(
             Timer::after(Duration::from_millis(500)).await;
         }
 
-        display.clear(display::TEXT.into()).unwrap();
+        display.clear(display::TEXT).unwrap();
         display::flush(&mut display).unwrap();
 
         // FIXME: HTTPS doesn't work on imgs.xkcd.com: Tls(HandshakeAborted(Fatal, ProtocolVersion))
@@ -495,7 +496,7 @@ async fn task(
                         println!("Image header: {:?}", header);
                         image_header = Some(header);
 
-                        display.clear(display::BACKGROUND.into()).unwrap();
+                        display.clear(display::BACKGROUND).unwrap();
                         display::flush(&mut display).unwrap();
                     }
                     inflater::Event::End => {
