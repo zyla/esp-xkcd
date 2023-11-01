@@ -162,33 +162,37 @@ mod display {
     }
 }
 
-#[cfg(feature = "display-ili9341")]
+#[cfg(feature = "display-ili9488")]
 mod display {
     use super::*;
-    use embedded_graphics::pixelcolor::Rgb565;
+    use embedded_graphics::pixelcolor::Rgb666;
     use embedded_graphics::prelude::RgbColor;
     use hal::peripherals::SPI2;
     use hal::spi::FullDuplexMode;
     use hal::Spi;
-
+    use display_interface::DisplayError;
     use mipidsi::*;
     use display_interface_spi::SPIInterfaceNoCS;
 
     pub type SPI = Spi<'static, SPI2, FullDuplexMode>;
-    pub type DISPLAY<'a> = Display<SPIInterfaceNoCS<SPI, GpioPin<Output<PushPull>, 6>>, models::ILI9341Rgb565, GpioPin<Output<PushPull>, 5>>;
-    //pub type DISPLAY<'a> = ili9341::Ili9341<SPIInterfaceNoCS<SPI, GpioPin<Output<PushPull>, 6>>, GpioPin<Output<PushPull>, 5>>; 
+    pub type DISPLAY<'a> = Display<SPIInterfaceNoCS<SPI, GpioPin<Output<PushPull>, 6>>, models::ILI9486Rgb666, GpioPin<Output<PushPull>, 7>>;
     
-    pub type Color = Rgb565;
-    pub const BACKGROUND: Color = Rgb565::BLACK;
-    pub const TEXT: Color = Rgb565::RED;
+    pub type Color = Rgb666;
+    pub const BACKGROUND: Color = Rgb666::BLACK;
+    pub const TEXT: Color = Rgb666::RED;
 
     pub fn flush(_display: &mut DISPLAY) -> Result<(), ()> {
         // no-op
         Ok(())
     }
 
-    pub fn dimensions() -> (u32, u32) {
-        (320, 480)
+    pub fn set_pixel(
+        display: &mut DISPLAY,
+        x: u32,
+        y: u32,
+        color: Color,
+    ) -> Result<(), DisplayError> {
+        display.set_pixel(x as u16, y as u16, color)
     }
 }
 
@@ -392,7 +396,7 @@ async fn main(spawner: embassy_executor::Spawner) {
         display
     };
 
-    display.clear(display::BACKGROUND).unwrap();
+    display.clear(display::BACKGROUND.into()).unwrap();
     display::flush(&mut display).unwrap();
 
     spawner.spawn(connection_wifi(controller)).ok();
@@ -445,7 +449,7 @@ async fn task(
             Timer::after(Duration::from_millis(500)).await;
         }
 
-        display.clear(display::TEXT).unwrap();
+        display.clear(display::TEXT.into()).unwrap();
         display::flush(&mut display).unwrap();
 
         // FIXME: HTTPS doesn't work on imgs.xkcd.com: Tls(HandshakeAborted(Fatal, ProtocolVersion))
@@ -491,7 +495,7 @@ async fn task(
                         println!("Image header: {:?}", header);
                         image_header = Some(header);
 
-                        display.clear(display::BACKGROUND).unwrap();
+                        display.clear(display::BACKGROUND.into()).unwrap();
                         display::flush(&mut display).unwrap();
                     }
                     inflater::Event::End => {
