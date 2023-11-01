@@ -804,38 +804,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "esp-jokes-rs"
-version = "0.1.0"
-dependencies = [
- "display-interface",
- "display-interface-spi",
- "embassy-executor",
- "embassy-net",
- "embassy-net-driver",
- "embassy-time 0.1.4",
- "embedded-graphics",
- "embedded-io 0.4.0",
- "embedded-io-async 0.6.0",
- "embedded-svc",
- "embedded-text",
- "esp-alloc",
- "esp-backtrace",
- "esp-println",
- "esp-wifi",
- "esp32c3-hal",
- "esp32c6-hal",
- "heapless 0.7.16",
- "incremental-png",
- "log",
- "mipidsi",
- "reqwless",
- "smoltcp",
- "ssd1306",
- "st7735-lcd",
- "static_cell",
-]
-
-[[package]]
 name = "esp-println"
 version = "0.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -905,6 +873,38 @@ version = "0.1.0"
 source = "git+https://github.com/jborkowski/esp-wifi/?rev=5d89236#5d892365348167a080b2a5eef712b43dd79d0707"
 dependencies = [
  "anyhow",
+]
+
+[[package]]
+name = "esp-xkcd"
+version = "0.1.0"
+dependencies = [
+ "display-interface",
+ "display-interface-spi",
+ "embassy-executor",
+ "embassy-net",
+ "embassy-net-driver",
+ "embassy-time 0.1.4",
+ "embedded-graphics",
+ "embedded-io 0.4.0",
+ "embedded-io-async 0.6.0",
+ "embedded-svc",
+ "embedded-text",
+ "esp-alloc",
+ "esp-backtrace",
+ "esp-println",
+ "esp-wifi",
+ "esp32c3-hal",
+ "esp32c6-hal",
+ "heapless 0.7.16",
+ "incremental-png",
+ "log",
+ "mipidsi",
+ "reqwless",
+ "smoltcp",
+ "ssd1306",
+ "st7735-lcd",
+ "static_cell",
 ]
 
 [[package]]
