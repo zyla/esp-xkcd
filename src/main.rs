@@ -11,6 +11,7 @@ use embassy_net::{
     Config, Stack, StackResources,
 };
 use embassy_time::{Duration, Timer};
+use embedded_graphics::{pixelcolor::Gray8, prelude::Dimensions};
 use embedded_svc::wifi::{ClientConfiguration, Configuration, Wifi};
 use esp_backtrace as _;
 use esp_println::println;
@@ -69,7 +70,8 @@ unsafe impl GlobalAlloc for FakeAllocator {
 #[cfg(feature = "display-st7735")]
 mod display {
     use super::*;
-    use embedded_graphics::pixelcolor::Rgb565;
+    use embedded_graphics::pixelcolor::{raw::RawU16, Rgb565, RgbColor};
+    use embedded_graphics::prelude::RawData;
     use hal::peripherals::SPI2;
     use hal::spi::FullDuplexMode;
     use hal::Spi;
@@ -85,6 +87,10 @@ mod display {
     pub fn flush(_display: &mut DISPLAY) -> Result<(), ()> {
         // no-op
         Ok(())
+    }
+
+    pub fn set_pixel(display: &mut DISPLAY, x: u32, y: u32, color: Color) -> Result<(), ()> {
+        display.set_pixel(x as u16, y as u16, RawU16::from(color).into_inner())
     }
 }
 
@@ -107,6 +113,12 @@ mod display {
 
     pub fn flush(display: &mut DISPLAY) -> Result<(), display_interface::DisplayError> {
         display.flush()
+    }
+
+    pub fn set_pixel(display: &mut DISPLAY, x: u32, y: u32, color: Color) -> Result<(), ()> {
+        // Note: we invert pixels, because xkcd looks better that way on this display
+        display.set_pixel(x, y, color != BinaryColor::On);
+        Ok(())
     }
 }
 
@@ -318,8 +330,8 @@ async fn task(
         let mut png = PngReader::new();
         let mut reader = response.body().reader();
 
-        let display_width = display.dimensions().0 as u32;
-        let display_height = display.dimensions().1 as u32;
+        let display_width = display.bounding_box().size.width;
+        let display_height = display.bounding_box().size.height;
         let mut x: u32 = 0;
         let mut y: u32 = 0;
         let mut image_header: Option<ImageHeader> = None;
@@ -353,7 +365,8 @@ async fn task(
 
                         for pixel in pixels.iter().copied() {
                             if x < display_width {
-                                display.set_pixel(x, y, pixel < 128);
+                                display::set_pixel(&mut display, x, y, Gray8::new(pixel).into())
+                                    .unwrap();
                             }
                             x += 1;
 
