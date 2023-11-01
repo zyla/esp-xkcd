@@ -94,6 +94,46 @@ mod display {
     }
 }
 
+#[cfg(feature = "display-st7789")]
+mod display {
+    use super::*;
+    use display_interface::DisplayError;
+    use display_interface_spi::SPIInterfaceNoCS;
+    use embedded_graphics::pixelcolor::{Rgb565, RgbColor};
+    use hal::peripherals::SPI2;
+    use hal::spi::FullDuplexMode;
+    use hal::Spi;
+    use mipidsi::models::ST7789;
+
+    pub type SPI = Spi<'static, SPI2, FullDuplexMode>;
+    pub type DISPLAY<'a> = mipidsi::Display<
+        SPIInterfaceNoCS<
+            Spi<'a, esp32c3_hal::peripherals::SPI2, FullDuplexMode>,
+            GpioPin<Output<esp32c3_hal::gpio::PushPull>, 6>,
+        >,
+        ST7789,
+        GpioPin<Output<esp32c3_hal::gpio::PushPull>, 7>,
+    >;
+
+    pub type Color = Rgb565;
+    pub const BACKGROUND: Color = Rgb565::BLACK;
+    pub const TEXT: Color = Rgb565::RED;
+
+    pub fn flush(_display: &mut DISPLAY) -> Result<(), ()> {
+        // no-op
+        Ok(())
+    }
+
+    pub fn set_pixel(
+        display: &mut DISPLAY,
+        x: u32,
+        y: u32,
+        color: Color,
+    ) -> Result<(), DisplayError> {
+        display.set_pixel(x as u16, y as u16, color)
+    }
+}
+
 #[cfg(feature = "display-ssd1306")]
 mod display {
     use super::*;
@@ -198,34 +238,54 @@ async fn main(spawner: embassy_executor::Spawner) {
 
     use display::*;
 
-    #[cfg(feature = "display-st7735")]
+    #[cfg(any(feature = "display-st7735", feature = "display-st7789"))]
     let mut display: DISPLAY = {
         use hal::{Delay, Spi};
 
-        let miso = io.pins.gpio6.into_push_pull_output(); // A0
+        let mut delay = Delay::new(&clocks);
+
+        let a0 = io.pins.gpio6.into_push_pull_output();
         let rst = io.pins.gpio7.into_push_pull_output();
+
+        let sck = io.pins.gpio1;
+        let sda = io.pins.gpio2;
+        let cs = io.pins.gpio8;
 
         let spi: SPI = Spi::new(
             peripherals.SPI2,
-            io.pins.gpio1,
-            io.pins.gpio2,                         // sda
-            io.pins.gpio0.into_push_pull_output(), // dc not connected
-            io.pins.gpio8,
+            sck,
+            sda,
+            io.pins.gpio0.into_push_pull_output(), // no MISO, dummy pin
+            cs,
             60u32.MHz(),
             hal::spi::SpiMode::Mode0,
             &mut system.peripheral_clock_control,
             &clocks,
         );
 
-        let mut display = st7735_lcd::ST7735::new(spi, miso, rst, true, false, 160, 128);
+        #[cfg(feature = "display-st7735")]
+        {
+            let mut display = DISPLAY::new(spi, a0, rst, true, false, 160, 128);
+            display.init(&mut delay).unwrap();
+            display
+                .set_orientation(&st7735_lcd::Orientation::Landscape)
+                .unwrap();
+            display.set_offset(0, 0);
+            display
+        }
 
-        let mut delay = Delay::new(&clocks);
-        display.init(&mut delay).unwrap();
-        display
-            .set_orientation(&st7735_lcd::Orientation::Landscape)
-            .unwrap();
-        display.set_offset(0, 0);
-        display
+        #[cfg(feature = "display-st7789")]
+        {
+            use display_interface_spi::SPIInterfaceNoCS;
+            let interface = SPIInterfaceNoCS::new(spi, a0);
+            let display = mipidsi::Builder::st7789(interface)
+                .with_display_size(128, 160)
+                .with_framebuffer_size(128, 160)
+                .with_orientation(mipidsi::Orientation::Landscape(true))
+                .init(&mut delay, Some(rst))
+                .unwrap();
+            display
+        }
     };
 
     #[cfg(feature = "display-ssd1306")]
@@ -359,7 +419,7 @@ async fn task(
                     }
                     inflater::Event::ImageData(pixels) => {
                         let image_header = image_header.as_ref().expect("no header!");
-                        println!("Decoded {} pixels", pixels.len());
+                        println!("Decoded {} pixels at ({}, {})", pixels.len(), x, y);
 
                         // Assuming 8-bit grayscale, no filtering, no interlacing
 
