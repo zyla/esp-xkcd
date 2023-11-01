@@ -165,18 +165,22 @@ mod display {
 #[cfg(feature = "display-ili9488")]
 mod display {
     use super::*;
+    use display_interface::DisplayError;
+    use display_interface_spi::SPIInterfaceNoCS;
     use embedded_graphics::pixelcolor::Rgb666;
     use embedded_graphics::prelude::RgbColor;
     use hal::peripherals::SPI2;
     use hal::spi::FullDuplexMode;
     use hal::Spi;
-    use display_interface::DisplayError;
     use mipidsi::*;
-    use display_interface_spi::SPIInterfaceNoCS;
 
     pub type SPI = Spi<'static, SPI2, FullDuplexMode>;
-    pub type DISPLAY<'a> = Display<SPIInterfaceNoCS<SPI, GpioPin<Output<PushPull>, 6>>, models::ILI9486Rgb666, GpioPin<Output<PushPull>, 7>>;
-    
+    pub type DISPLAY<'a> = Display<
+        SPIInterfaceNoCS<SPI, GpioPin<Output<PushPull>, 6>>,
+        models::ILI9486Rgb666,
+        GpioPin<Output<PushPull>, 7>,
+    >;
+
     pub type Color = Rgb666;
     pub const BACKGROUND: Color = Rgb666::BLACK;
     pub const TEXT: Color = Rgb666::RED;
@@ -195,9 +199,6 @@ mod display {
         display.set_pixel(x as u16, y as u16, color)
     }
 }
-
-
-
 
 use display::DISPLAY;
 
@@ -356,10 +357,9 @@ async fn main(spawner: embassy_executor::Spawner) {
 
     #[cfg(feature = "display-ili9488")]
     let mut display: DISPLAY = {
-
-        use hal::{spi::SpiMode, Spi, Delay};
-        use mipidsi::*;
         use display_interface_spi::SPIInterfaceNoCS;
+        use hal::{spi::SpiMode, Delay, Spi};
+        use mipidsi::*;
 
         // Define the Data/Command select pin as a digital output
         let dc = io.pins.gpio6.into_push_pull_output();
@@ -385,7 +385,7 @@ async fn main(spawner: embassy_executor::Spawner) {
             &mut system.peripheral_clock_control,
             &clocks,
         );
- 
+
         // Define the display interface with no chip select
         let di = SPIInterfaceNoCS::new(spi, dc);
 
@@ -395,7 +395,6 @@ async fn main(spawner: embassy_executor::Spawner) {
             .init(&mut delay, Some(rst))
             .unwrap();
 
-       
         display
     };
 
@@ -406,8 +405,6 @@ async fn main(spawner: embassy_executor::Spawner) {
     spawner.spawn(net_task(stack)).ok();
     spawner.spawn(task(input, stack, seed.into(), display)).ok();
 }
-
-
 
 #[embassy_executor::task]
 async fn task(
@@ -422,6 +419,7 @@ async fn task(
     let dns = DnsSocket::new(stack);
 
     const IMAGE_URLS: &[&str] = &[
+        "http://imgs.xkcd.com/comics/book_burning.png",
         "http://imgs.xkcd.com/comics/the_universal_label.png",
         "http://imgs.xkcd.com/comics/journal_4.png",
         "http://imgs.xkcd.com/comics/daylight_saving_choice.png",
@@ -431,7 +429,6 @@ async fn task(
         "http://imgs.xkcd.com/comics/to_be_wanted.png",
         // Doesn't work, we only handle grayscale images for now
         "http://imgs.xkcd.com/comics/dendrochronology.png",
-
         // Crashes with "buffer error" from incremental-png :(
         // "http://imgs.xkcd.com/comics/depth.png",
 
