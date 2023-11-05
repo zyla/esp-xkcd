@@ -132,6 +132,22 @@ mod display {
     ) -> Result<(), DisplayError> {
         display.set_pixel(x as u16, y as u16, color)
     }
+
+    pub fn write_row(
+        display: &mut DISPLAY,
+        x: u32,
+        y: u32,
+        n: u32,
+        colors: impl Iterator<Item = Color>,
+    ) -> Result<(), DisplayError> {
+        display.set_pixels(
+            x as u16,
+            y as u16,
+            x as u16 + n as u16 - 1,
+            y as u16,
+            colors,
+        )
+    }
 }
 
 #[cfg(feature = "display-ssd1306")]
@@ -487,12 +503,17 @@ async fn task(
         let mut buf = [0; 2048];
         let mut total_bytes_read = 0;
         loop {
+            let start = rtc.get_time_us();
             let n = reader.read(&mut buf).await.unwrap();
             if n == 0 {
                 break;
             }
             total_bytes_read += n;
-            println!("Received {} bytes (total {})", n, total_bytes_read);
+            let duration = rtc.get_time_us() - start;
+            println!(
+                "Received {} bytes in {}us (total {})",
+                n, duration, total_bytes_read
+            );
             let start = rtc.get_time_us();
             let mut num_drawn = 0;
             let flow = png.process_data::<()>(&buf[..n], |event| {
@@ -512,22 +533,41 @@ async fn task(
 
                         // Assuming 8-bit grayscale, no filtering, no interlacing
 
-                        for pixel in pixels.iter().copied() {
+                        let mut i = 0;
+                        while i < pixels.len() {
                             let display_x = image_x as i32 - image_offset_x as i32;
                             let display_y = image_y as i32 - image_offset_y as i32;
 
-                            if display_y >= 0 && display_x >= 0 && display_x < display_width as i32
+                            if display_y >= 0
+                                && display_x >= 0
+                                && display_x < display_width as i32
+                                && image_x < image_header.width
                             {
-                                display::set_pixel(
+                                let n = core::cmp::min(
+                                    display_width - display_x as u32,
+                                    core::cmp::min(
+                                        (pixels.len() - i) as u32,
+                                        image_header.width - image_x,
+                                    ),
+                                );
+                                display::write_row(
                                     &mut display,
                                     display_x as u32,
                                     display_y as u32,
-                                    Gray8::new(pixel).into(),
+                                    n,
+                                    pixels[i..i + n as usize]
+                                        .iter()
+                                        .copied()
+                                        .map(|pixel| Gray8::new(pixel).into()),
                                 )
                                 .unwrap();
-                                num_drawn += 1;
+                                i += n as usize;
+                                num_drawn += n;
+                                image_x += n as u32;
+                            } else {
+                                i += 1;
+                                image_x += 1;
                             }
-                            image_x += 1;
 
                             // FIXME: Logically we shouldn't need the +1 here. But without it the
                             // image renders with a off-by-one error. What's going on?
