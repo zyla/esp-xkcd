@@ -401,7 +401,9 @@ async fn main(spawner: embassy_executor::Spawner) {
 
     spawner.spawn(connection_wifi(controller)).ok();
     spawner.spawn(net_task(stack)).ok();
-    spawner.spawn(task(input, stack, seed.into(), display)).ok();
+    spawner
+        .spawn(task(input, stack, seed.into(), display, rtc))
+        .ok();
 }
 
 #[embassy_executor::task]
@@ -410,6 +412,7 @@ async fn task(
     stack: &'static Stack<WifiDevice<'static>>,
     _seed: u64,
     mut display: DISPLAY<'static>,
+    rtc: Rtc<'static>,
 ) {
     let mut rx_buffer = [0; 2048];
     let client_state = TcpClientState::<1, 2048, 2048>::new();
@@ -481,7 +484,7 @@ async fn task(
         let mut image_y: u32 = 0;
         let mut image_header: Option<ImageHeader> = None;
 
-        let mut buf = [0; 1024];
+        let mut buf = [0; 2048];
         let mut total_bytes_read = 0;
         loop {
             let n = reader.read(&mut buf).await.unwrap();
@@ -490,6 +493,8 @@ async fn task(
             }
             total_bytes_read += n;
             println!("Received {} bytes (total {})", n, total_bytes_read);
+            let start = rtc.get_time_us();
+            let mut num_drawn = 0;
             let flow = png.process_data::<()>(&buf[..n], |event| {
                 match event {
                     inflater::Event::ImageHeader(header) => {
@@ -504,12 +509,6 @@ async fn task(
                     }
                     inflater::Event::ImageData(pixels) => {
                         let image_header = image_header.as_ref().expect("no header!");
-                        //   println!(
-                        //       "Decoded {} pixels at ({}, {})",
-                        //       pixels.len(),
-                        //       image_x,
-                        //       image_y
-                        //   );
 
                         // Assuming 8-bit grayscale, no filtering, no interlacing
 
@@ -526,6 +525,7 @@ async fn task(
                                     Gray8::new(pixel).into(),
                                 )
                                 .unwrap();
+                                num_drawn += 1;
                             }
                             image_x += 1;
 
@@ -546,6 +546,8 @@ async fn task(
                 }
                 ControlFlow::Continue(())
             });
+            let duration = rtc.get_time_us() - start;
+            println!("Processed in {}us (drawn {} pixels)", duration, num_drawn);
             display::flush(&mut display).unwrap();
             if let ControlFlow::Break(_) = flow {
                 break;
@@ -592,7 +594,7 @@ async fn task(
 struct PngReader {
     dechunker: Dechunker,
     sd: StreamDecoder,
-    inflater: Inflater<1024>,
+    inflater: Inflater<2048>,
 }
 
 impl PngReader {

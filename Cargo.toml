@@ -56,6 +56,12 @@ esp32c6 = ["esp32c6-hal", "esp-backtrace/esp32c6", "esp-println/esp32c6", "esp-w
 [profile.dev.package.esp-wifi]
 opt-level = 3
 
+[profile.dev.package.incremental-png]
+opt-level = 3
+
+[profile.dev.package.miniz_oxide]
+opt-level = 3
+
 [profile.dev]
 opt-level = "z"
 lto = false
