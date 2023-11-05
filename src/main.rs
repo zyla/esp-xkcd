@@ -319,9 +319,7 @@ async fn main(spawner: embassy_executor::Spawner) {
             use display_interface_spi::SPIInterfaceNoCS;
             let interface = SPIInterfaceNoCS::new(spi, a0);
             let display = mipidsi::Builder::st7789(interface)
-                .with_display_size(128, 160)
-                .with_framebuffer_size(128, 160)
-                .with_orientation(mipidsi::Orientation::Landscape(true))
+                .with_orientation(mipidsi::Orientation::LandscapeInverted(true))
                 .init(&mut delay, Some(rst))
                 .unwrap();
             display
