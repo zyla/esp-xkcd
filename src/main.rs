@@ -18,16 +18,20 @@ use esp_println::println;
 use esp_wifi::wifi::{WifiController, WifiDevice, WifiEvent, WifiMode, WifiState};
 use esp_wifi::{initialize, EspWifiInitFor};
 
+#[cfg(feature = "esp32")]
+pub use esp32_hal as hal;
 #[cfg(feature = "esp32c3")]
 pub use esp32c3_hal as hal;
 #[cfg(feature = "esp32c6")]
 pub use esp32c6_hal as hal;
 
+#[cfg(any(feature = "esp32c3", feature = "esp32c6"))]
+use hal::systimer::SystemTimer;
+use hal::Rng;
 use hal::{
     clock::ClockControl, embassy, gpio::*, peripherals::Peripherals, prelude::*, timer::TimerGroup,
     Rtc, IO,
 };
-use hal::{systimer::SystemTimer, Rng};
 
 use embedded_graphics::draw_target::DrawTarget;
 use embedded_io_async::Read;
@@ -66,6 +70,11 @@ unsafe impl GlobalAlloc for FakeAllocator {
         panic!("who needs the allocator?");
     }
 }
+
+#[cfg(any(feature = "esp32c3", feature = "esp32c6"))]
+type BUTTON = Gpio9<Input<PullUp>>;
+#[cfg(feature = "esp32")]
+type BUTTON = Gpio0<Input<PullUp>>;
 
 #[cfg(feature = "display-st7735")]
 mod display {
@@ -108,11 +117,11 @@ mod display {
     pub type SPI = Spi<'static, SPI2, FullDuplexMode>;
     pub type DISPLAY<'a> = mipidsi::Display<
         SPIInterfaceNoCS<
-            Spi<'a, esp32c3_hal::peripherals::SPI2, FullDuplexMode>,
-            GpioPin<Output<esp32c3_hal::gpio::PushPull>, 6>,
+            Spi<'a, hal::peripherals::SPI2, FullDuplexMode>,
+            GpioPin<Output<hal::gpio::PushPull>, 6>,
         >,
         ST7789,
-        GpioPin<Output<esp32c3_hal::gpio::PushPull>, 7>,
+        GpioPin<Output<hal::gpio::PushPull>, 7>,
     >;
 
     pub type Color = Rgb565;
@@ -200,19 +209,59 @@ mod display {
     }
 }
 
+#[cfg(feature = "display-ili9341")]
+mod display {
+    use super::*;
+    use display_interface::DisplayError;
+    use display_interface_spi::SPIInterfaceNoCS;
+    use embedded_graphics::pixelcolor::Rgb565;
+    use embedded_graphics::prelude::RgbColor;
+    use hal::peripherals::SPI2;
+    use hal::spi::FullDuplexMode;
+    use hal::Spi;
+    use mipidsi::*;
+
+    pub type SPI = Spi<'static, SPI2, FullDuplexMode>;
+    pub type DISPLAY<'a> = Display<
+        SPIInterfaceNoCS<SPI, GpioPin<Output<PushPull>, 2>>,
+        models::ILI9341Rgb565,
+        GpioPin<Output<PushPull>, 15>,
+    >;
+
+    pub type Color = Rgb565;
+    pub const BACKGROUND: Color = Rgb565::BLACK;
+    pub const TEXT: Color = Rgb565::RED;
+
+    pub fn flush(_display: &mut DISPLAY) -> Result<(), ()> {
+        // no-op
+        Ok(())
+    }
+
+    pub fn set_pixel(
+        display: &mut DISPLAY,
+        x: u32,
+        y: u32,
+        color: Color,
+    ) -> Result<(), DisplayError> {
+        display.set_pixel(x as u16, y as u16, color)
+    }
+}
+
 use display::DISPLAY;
 
-#[embassy_executor::main(entry = "hal::entry")]
+#[embassy_macros::main_riscv(entry = "hal::entry")]
 async fn main(spawner: embassy_executor::Spawner) {
     let peripherals = Peripherals::take();
     #[cfg(feature = "esp32c3")]
     let mut system = peripherals.SYSTEM.split();
     #[cfg(feature = "esp32c6")]
     let mut system = peripherals.PCR.split();
+    #[cfg(feature = "esp32")]
+    let mut system = peripherals.DPORT.split();
 
     let clocks = ClockControl::max(system.clock_control).freeze();
 
-    #[cfg(feature = "esp32c3")]
+    #[cfg(any(feature = "esp32c3", feature = "esp32"))]
     let mut rtc = Rtc::new(peripherals.RTC_CNTL);
     #[cfg(feature = "esp32c6")]
     let mut rtc = Rtc::new(peripherals.LP_CLKRST);
@@ -231,6 +280,7 @@ async fn main(spawner: embassy_executor::Spawner) {
     let mut wdt1 = timer_group1.wdt;
 
     // disable watchdog timers
+    #[cfg(any(esp32c2, esp32c3, esp32c6, esp32h2, esp32s3))]
     rtc.swd.disable();
     rtc.rwdt.disable();
     wdt0.disable();
@@ -239,7 +289,10 @@ async fn main(spawner: embassy_executor::Spawner) {
     esp_println::logger::init_logger(log::LevelFilter::Info);
 
     let mut rng = Rng::new(peripherals.RNG);
+    #[cfg(any(feature = "esp32c3", feature = "esp32c6"))]
     let timer = SystemTimer::new(peripherals.SYSTIMER).alarm0;
+    #[cfg(feature = "esp32")]
+    let timer = timer_group1.timer0;
     let init = initialize(
         EspWifiInitFor::Wifi,
         timer,
@@ -268,7 +321,10 @@ async fn main(spawner: embassy_executor::Spawner) {
     ));
 
     let io = IO::new(peripherals.GPIO, peripherals.IO_MUX);
+    #[cfg(any(feature = "esp32c3", feature = "esp32c6"))]
     let input = io.pins.gpio9.into_pull_up_input();
+    #[cfg(feature = "esp32")]
+    let input = io.pins.gpio0.into_pull_up_input();
 
     hal::interrupt::enable(
         hal::peripherals::Interrupt::GPIO,
@@ -396,6 +452,47 @@ async fn main(spawner: embassy_executor::Spawner) {
         display
     };
 
+    #[cfg(feature = "display-ili9341")]
+    let mut display: DISPLAY = {
+        use display_interface_spi::SPIInterfaceNoCS;
+        use hal::{spi::SpiMode, Delay, Spi};
+        use mipidsi::*;
+
+        // Define the Data/Command select pin as a digital output
+        let dc = io.pins.gpio2.into_push_pull_output();
+
+        let mut backlight = io.pins.gpio21.into_push_pull_output();
+        backlight.set_high().unwrap();
+
+        // Define the SPI pins and create the SPI interface
+        let sck = io.pins.gpio14;
+        let miso = io.pins.gpio12;
+        let mosi = io.pins.gpio13;
+        let cs = io.pins.gpio15;
+        let spi = Spi::new(
+            peripherals.SPI2,
+            sck,
+            mosi,
+            miso,
+            cs,
+            60_u32.MHz(),
+            SpiMode::Mode0,
+            &mut system.peripheral_clock_control,
+            &clocks,
+        );
+
+        // Define the display interface with no chip select
+        let di = SPIInterfaceNoCS::new(spi, dc);
+
+        let mut delay = Delay::new(&clocks);
+        let display = Builder::ili9341_rgb565(di)
+            .with_orientation(Orientation::Landscape(false))
+            .init(&mut delay, None)
+            .unwrap();
+
+        display
+    };
+
     display.clear(display::BACKGROUND).unwrap();
     display::flush(&mut display).unwrap();
 
@@ -408,7 +505,7 @@ async fn main(spawner: embassy_executor::Spawner) {
 
 #[embassy_executor::task]
 async fn task(
-    mut input: Gpio9<Input<PullUp>>,
+    mut input: BUTTON,
     stack: &'static Stack<WifiDevice<'static>>,
     _seed: u64,
     mut display: DISPLAY<'static>,

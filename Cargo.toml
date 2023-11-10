@@ -5,22 +5,31 @@ authors = ["Jonatan Borkowski <jonatan@thebo.me>", "Maciej Bielecki <zyla@prati.
 edition = "2021"
 license = "MIT OR Apache-2.0"
 
+[patch.crates-io]
+embassy-executor = { git = "https://github.com/zyla/embassy", rev = "4e27208fca46" }
+embassy-net = { git = "https://github.com/zyla/embassy", rev = "4e27208fca46" }
+embassy-net-driver = { git = "https://github.com/zyla/embassy", rev = "4e27208fca46"}
+embassy-time = { git = "https://github.com/zyla/embassy", rev = "4e27208fca46" }
+embassy-macros = { git = "https://github.com/zyla/embassy", rev = "4e27208fca46" }
+
 [dependencies]
 esp-backtrace = { version = "0.8.0", features = ["panic-handler", "exception-handler", "print-uart"] }
 esp-println = { version = "0.6.0", features = ["log"] }
 log = { version = "0.4.18" }
 esp-alloc = { version = "0.3.0" }
-esp-wifi  = { git = "https://github.com/jborkowski/esp-wifi/", rev = "5d89236", features = ["wifi", "embassy-net", "async"] }
+esp-wifi  = { git = "https://github.com/jborkowski/esp-wifi/", rev = "5ad2714", features = ["wifi", "embassy-net", "async"] }
 smoltcp = { version = "0.10.0", default-features=false, features = ["proto-igmp", "proto-ipv4", "socket-tcp", "socket-icmp", "socket-udp", "medium-ethernet", "proto-dhcpv4", "socket-raw", "socket-dhcpv4"] }
 heapless = { version = "0.7.14", default-features = false }
 
+embassy-executor = { version = "0.3.0", features = ["nightly", "integrated-timers","executor-thread"] }
+embassy-net = { version = "0.1.0", features = ["nightly","tcp","proto-ipv4","medium-ethernet","dhcpv4", "dns", "log", "udp", "medium-ip" ] }
+embassy-net-driver = "0.1.0"
+embassy-time = { version = "0.1.4", features = ["nightly"]}
+embassy-macros = "0.2.1"
+
 embedded-svc = { version = "0.25.0", default-features = false, features = [] }
 embedded-io = "0.4"
-embassy-executor = { git = "https://github.com/embassy-rs/embassy", rev = "889d482", features = ["nightly", "integrated-timers","executor-thread","arch-riscv32"] }
-embassy-net = { git = "https://github.com/embassy-rs/embassy", rev = "889d482", features = ["nightly","tcp","proto-ipv4","medium-ethernet","dhcpv4", "dns", "log", "udp", "medium-ip" ] }
-embassy-net-driver = { git = "https://github.com/embassy-rs/embassy", rev = "889d482"}
-embassy-time = { git = "https://github.com/embassy-rs/embassy", rev = "889d482",  features = ["nightly"]}
-reqwless = { version = "0.8.0", features = ["log"] }
+reqwless = { version = "0.9.0", features = ["log"], default-features = false }
 
 embedded-graphics = "0.8.1"
 
@@ -30,6 +39,7 @@ embedded-text = "0.6.6"
 # chips
 esp32c3-hal = { version = "0.12.0", features=["embassy","async","embassy-time-timg0"], optional = true }
 esp32c6-hal = { version = "0.5.0", features=["embassy","async","embassy-time-timg0"], optional = true }
+esp32-hal = { version = "0.15.0", features=["embassy","async","embassy-time-timg0"], optional = true }
 
 # display drivers
 st7735-lcd = {version = "0.9.0", optional = true }
@@ -48,10 +58,12 @@ default = ["display-st7789", "esp32c3"]
 #default = ["display-ili9488", "esp32c3"]
 display-ssd1306 = ["ssd1306", "display-interface"]
 display-ili9488 = ["mipidsi", "display-interface"]
+display-ili9341 = ["mipidsi", "display-interface"]
 display-st7789 = ["mipidsi", "display-interface"]
 
-esp32c3 = ["esp32c3-hal", "esp-backtrace/esp32c3", "esp-println/esp32c3", "esp-wifi/esp32c3"]
-esp32c6 = ["esp32c6-hal", "esp-backtrace/esp32c6", "esp-println/esp32c6", "esp-wifi/esp32c6"]
+esp32c3 = ["esp32c3-hal", "esp-backtrace/esp32c3", "esp-println/esp32c3", "esp-wifi/esp32c3", "embassy-executor/arch-riscv32"]
+esp32c6 = ["esp32c6-hal", "esp-backtrace/esp32c6", "esp-println/esp32c6", "esp-wifi/esp32c6", "embassy-executor/arch-riscv32"]
+esp32 = ["esp32-hal", "esp-backtrace/esp32", "esp-println/esp32", "esp-wifi/esp32", "embassy-executor/arch-xtensa"]
 
 [profile.dev.package.esp-wifi]
 opt-level = 3
